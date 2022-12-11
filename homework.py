@@ -1,8 +1,8 @@
 import datetime
-import json
 import logging
 import os
 import time
+from http import HTTPStatus
 
 import requests
 import telegram
@@ -20,9 +20,9 @@ HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 
 
 HOMEWORK_VERDICTS = {
-    'approved': '✅ Работа проверена: ревьюеру всё понравилось. Ура!',
-    'reviewing': '🔎 Работа взята на проверку ревьюером.',
-    'rejected': '⚠️ Работа проверена: у ревьюера есть замечания.'
+    'approved': 'Работа проверена: ревьюеру всё понравилось. Ура!',
+    'reviewing': 'Работа взята на проверку ревьюером.',
+    'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
 
 logging.basicConfig(
@@ -53,6 +53,22 @@ class RequestExceptionError(Exception):
     """Ошибка запроса."""
 
 
+class NotForSend(Exception):
+    """Исключение не для пересылки в telegram."""
+
+
+class WrongResponseCode(Exception):
+    """Неверный ответ API."""
+
+
+class EmptyResponseFromAPI(NotForSend):
+    """Пустой ответ API."""
+
+
+class TelegramError(NotForSend):
+    """Ошибка отправки сообщения в telegram."""
+
+
 def check_tokens():
     """Проверяем, что есть все токены.
     Если нет хотя бы одного, то останавливаем бота.
@@ -64,71 +80,77 @@ def check_tokens():
     return all([PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID])
 
 
-def send_message(bot, message):
-    """Отправка сообщения в Телеграм."""
+def send_message(bot: telegram.bot.Bot, message: str) -> None:
+    """Отправляет сообщение в telegram."""
     try:
-        bot.send_message(TELEGRAM_CHAT_ID, message)
-        logger.info(
-            f'Сообщение в Telegram отправлено: {message}')
-    except telegram.TelegramError as telegram_error:
-        logger.error(
-            f'Сообщение в Telegram не отправлено: {telegram_error}')
+        logging.info('Начало отправки статуса в telegram')
+        bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
+    except telegram.error.TelegramError as error:
+        raise TelegramError(f'Ошибка отправки статуса в telegram: {error}')
+    else:
+        logging.info('Статус отправлен в telegram')
 
 
-def get_api_answer(url, current_timestamp):
-    """Получение данных с API YP."""
-    current_timestamp = current_timestamp or int(time.time())
-    headers = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
-    payload = {'from_date': current_timestamp}
+def get_api_answer(current_timestamp: int) -> dict:
+    """Отправляем запрос к API и получаем список домашних работ.
+    Также проверяем, что эндпоинт отдает статус 200.
+    """
+    timestamp = current_timestamp or int(time.time())
+    params_request = {
+        'url': ENDPOINT,
+        'headers': HEADERS,
+        'params': {'from_date': timestamp},
+    }
+    message = ('Начало запроса к API. Запрос: {url}, {headers}, {params}.'
+               ).format(**params_request)
+    logging.info(message)
     try:
-        response = requests.get(url, headers=headers, params=payload)
-        if response.status_code != 200:
-            code_api_msg = (
-                f'Эндпоинт {url} недоступен.'
-                f' Код ответа API: {response.status_code}')
-            logger.error(code_api_msg)
-            raise TheAnswerIsNot200Error(code_api_msg)
+        response = requests.get(**params_request)
+        if response.status_code != HTTPStatus.OK:
+            raise WrongResponseCode(
+                f'Ответ API не возвращает 200. '
+                f'Код ответа: {response.status_code}. '
+                f'Причина: {response.reason}. '
+                f'Текст: {response.text}.'
+            )
         return response.json()
-    except requests.exceptions.RequestException as request_error:
-        code_api_msg = f'Код ответа API (RequestException): {request_error}'
-        logger.error(code_api_msg)
-        raise RequestExceptionError(code_api_msg) from request_error
-    except json.JSONDecodeError as value_error:
-        code_api_msg = f'Код ответа API (ValueError): {value_error}'
-        logger.error(code_api_msg)
-        raise json.JSONDecodeError(code_api_msg) from value_error
+    except Exception as error:
+        message = ('API не возвращает 200. Запрос: {url}, {headers}, {params}.'
+                   ).format(**params_request)
+        raise WrongResponseCode(message, error)
 
 
-def check_response(response):
-    """Проверяем данные в response."""
-    if response.get('homeworks') is None:
-        code_api_msg = (
-            'Ошибка ключа homeworks или response'
-            'имеет неправильное значение.')
-        logger.error(code_api_msg)
-        raise EmptyDictionaryOrListError(code_api_msg)
-    if response['homeworks'] == []:
-        return {}
-    status = response['homeworks'][0].get('status')
-    if status not in HOMEWORK_VERDICTS:
-        code_api_msg = f'Ошибка не задокументированный статус: {status}'
-        logger.error(code_api_msg)
-        raise UndocumentedStatusError(code_api_msg)
-    return response['homeworks'][0]
+def check_response(response: dict):
+    """Проверяет ответ API на корректность.
+    В качестве параметра функция получает ответ API.
+    """
+    logging.info('Проверка ответа API на корректность')
+    if not isinstance(response, dict):
+        raise TypeError('Ответ API не является dict')
+    if 'homeworks' not in response or 'current_date' not in response:
+        raise EmptyDictionaryOrListError('Нет ключа homeworks в ответе API')
+    homeworks = response.get('homeworks')
+    if not isinstance(homeworks, list):
+        raise KeyError('homeworks не является list')
+    return homeworks
 
 
-def parse_status(homework):
-    """Анализ статуса если изменился."""
-    status = homework.get('status')
+def parse_status(homework: dict):
+    """Извлекает из информации о конкретной домашней работе статус этой работы.
+    В случае успеха, функция возвращает подготовленную для отправки
+    в Telegram строку.
+    """
+    logging.info('Проводим проверки и извлекаем статус работы')
+    if 'homework_name' not in homework:
+        raise KeyError('Нет ключа homework_name в ответе API')
     homework_name = homework.get('homework_name')
-    if status is None:
-        extracted_from_parse_status(
-            'Ошибка пустое значение status: ', status)
-    if homework_name is None:
-        extracted_from_parse_status(
-            'Ошибка пустое значение homework_name: ', homework_name)
-    verdict = HOMEWORK_VERDICTS[status]
-    return f'Изменился статус проверки работы "{homework_name}". {verdict}'
+    homework_status = homework.get('status')
+    if homework_status not in HOMEWORK_VERDICTS:
+        raise ValueError(f'Неизвестный статус работы - {homework_status}')
+    return ('Изменился статус проверки работы "{homework_name}". {verdict}'
+            ).format(homework_name=homework_name,
+                     verdict=HOMEWORK_VERDICTS[homework_status]
+                     )
 
 
 def extracted_from_parse_status(arg0, arg1):

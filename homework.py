@@ -8,10 +8,11 @@ from http import HTTPStatus
 import requests
 import telegram
 from dotenv import load_dotenv
-from exeptions import (EmptyDictionaryOrListError,
-                       UndocumentedStatusError,
-                       WrongResponseCode, TelegramError,
-                       JsonDoesNotExists)
+
+from exeptions import (EmptyDictionaryOrListError, JsonDoesNotExists,
+                       TelegramError, UndocumentedStatusError,
+                       WrongResponseCode)
+
 load_dotenv()
 
 PRACTICUM_TOKEN = os.getenv("PRACTICUM_TOKEN")

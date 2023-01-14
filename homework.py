@@ -10,7 +10,6 @@ import telegram
 from dotenv import load_dotenv
 
 from exeptions import (EmptyDictionaryOrListError, JsonDoesNotExists,
-                       TelegramError, UndocumentedStatusError,
                        WrongResponseCode)
 
 load_dotenv()
@@ -25,20 +24,18 @@ HEADERS = {"Authorization": f"OAuth {PRACTICUM_TOKEN}"}
 
 
 HOMEWORK_VERDICTS = {
-    'approved': 'Работа проверена: ревьюеру всё понравилось. Ура!',
-    'reviewing': 'Работа взята на проверку ревьюером.',
-    'rejected': 'Работа проверена: у ревьюера есть замечания.'
+    "approved": "Работа проверена: ревьюеру всё понравилось. Ура!",
+    "reviewing": "Работа взята на проверку ревьюером.",
+    "rejected": "Работа проверена: у ревьюера есть замечания."
 }
 
-logging.basicConfig(
-    level=logging.DEBUG,
+logging.FileHandler(
     filename="program.log",
-    filemode="w",
-    format="%(asctime)s - %(levelname)s - %(message)s - %(name)s"
+    mode="w",
 )
 logger = logging.getLogger(__name__)
 logger.addHandler(
-    logging.StreamHandler()
+    logging.StreamHandler(stream=None)
 )
 
 
@@ -46,7 +43,7 @@ def check_tokens():
     """Проверяем, что есть все токены.
     Если нет хотя бы одного, то останавливаем бота.
     """
-    if all([PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]):
+    if all((PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID)):
         return True
     no_tokens_msg = (
         "Программа принудительно остановлена. "
@@ -62,7 +59,7 @@ def send_message(bot: telegram.bot.Bot, message: str) -> None:
         bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
     except telegram.error.TelegramError as error:
         logging.error(f"Ошибка отправки статуса в telegram: {error}")
-        raise TelegramError(f"Ошибка отправки статуса в telegram: {error}")
+        logging.error(f"Ошибка отправки статуса в telegram: {error}")
 
 
 def get_api_answer(current_timestamp: int) -> dict:
@@ -100,7 +97,7 @@ def check_response(response: dict):
     """
     if not response:
         raise JsonDoesNotExists(
-            f'Функция {check_response.__repr__()} не получила JSON'
+            f"Функция {check_response.__repr__()} не получила JSON"
         )
 
     logging.info("Проверка ответа API на корректность")
@@ -115,8 +112,8 @@ def check_response(response: dict):
             f"в словаре нет домашней работы или она не является листом "
         )
 
-    if not response.get('homeworks'):
-        raise KeyError(f'в {response}  пустой JSON')
+    if not response.get("homeworks"):
+        raise KeyError(f"в {response}  пустой JSON")
 
     if "homeworks" not in response or "current_date" not in response:
         raise EmptyDictionaryOrListError("Нет ключа homeworks в ответе API")
@@ -141,13 +138,6 @@ def parse_status(homework: dict):
                      )
 
 
-def extracted_from_parse_status(arg0, arg1):
-    """Вывод ошибок парсера."""
-    code_api_msg = f"{arg0}{arg1}"
-    logger.error(code_api_msg)
-    raise UndocumentedStatusError(code_api_msg)
-
-
 def main():
     """Главная функция запуска бота."""
     if not check_tokens():
@@ -157,7 +147,7 @@ def main():
     send_message(
         bot,
         f"Я начал свою работу: {now.strftime('%d-%m-%Y %H:%M')}")
-    current_timestamp = int(time.time())
+    current_timestamp = 1668370964
     tmp_status = None
     errors = True
     while True:

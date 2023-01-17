@@ -20,3 +20,6 @@ class TelegramError(Exception):
 
 class JsonDoesNotExists(Exception):
     """Ответ не получен или получен пустым."""
+
+class CurrentDateDoesNotExists(Exception):
+    """В ответе нет текущей даты"""

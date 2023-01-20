@@ -9,8 +9,8 @@ import requests
 import telegram
 from dotenv import load_dotenv
 
-from exeptions import (EmptyDictionaryOrListError,
-                       WrongResponseCode, CurrentDateDoesNotExists)
+from exeptions import (CurrentDateDoesNotExists, EmptyDictionaryOrListError,
+                       WrongResponseCode)
 
 load_dotenv()
 
@@ -39,7 +39,8 @@ logger = logging.getLogger(__name__)
 
 
 def check_tokens():
-    """Проверяем, что есть все токены.
+    """
+    Проверяем, что есть все токены.
     Если нет хотя бы одного, то останавливаем бота.
     """
     return all((PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID))
@@ -58,7 +59,8 @@ def send_message(bot: telegram.bot.Bot, message: str) -> None:
 
 
 def get_api_answer(current_timestamp: int) -> dict:
-    """Отправляем запрос к API и получаем список домашних работ.
+    """
+    Отправляем запрос к API и получаем список домашних работ.
     Также проверяем, что эндпоинт отдает статус 200.
     """
     timestamp = current_timestamp or int(time.time())
@@ -87,7 +89,8 @@ def get_api_answer(current_timestamp: int) -> dict:
 
 
 def check_response(response: dict):
-    """Проверяет ответ API на корректность.
+    """
+    Проверяет ответ API на корректность.
     В качестве параметра функция получает ответ API.
     """
 
@@ -117,7 +120,8 @@ def check_response(response: dict):
 
 
 def parse_status(homework: dict):
-    """Извлекает из информации о конкретной домашней работе статус этой работы.
+    """
+    Извлекает из информации о конкретной домашней работе статус этой работы.
     В случае успеха, функция возвращает подготовленную для отправки
     в Telegram строку.
     """

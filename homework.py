@@ -87,7 +87,8 @@ def get_api_answer(current_timestamp: int) -> dict:
 
 
 def check_response(response: dict):
-    """Проверяет ответ API на корректность.
+    """
+    Проверяет ответ API на корректность.
     В качестве параметра функция получает ответ API.
     """
 

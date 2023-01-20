@@ -18,8 +18,5 @@ class TelegramError(Exception):
     """Ошибка отправки сообщения в telegram."""
 
 
-class JsonDoesNotExists(Exception):
-    """Ответ не получен или получен пустым."""
-
 class CurrentDateDoesNotExists(Exception):
     """В ответе нет текущей даты"""

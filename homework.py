@@ -91,17 +91,16 @@ def check_response(response: dict):
     В качестве параметра функция получает ответ API.
     """
 
-    if not response.get("current_date"):
-        raise CurrentDateDoesNotExists("В ответе нет текущей даты")
-
-    logging.info("Проверка ответа API на корректность")
+    logger.info("Проверка ответа API на корректность")
     if not isinstance(response, dict):
         raise TypeError(
             f"при получении ответа от api {response} пришёл не словарь "
         )
 
-    homework_template = response.get("homeworks")
+    if not response.get("current_date"):
+        raise CurrentDateDoesNotExists("В ответе нет текущей даты")
 
+    homework_template = response.get("homeworks")
     if not isinstance(homework_template, list):
         raise TypeError(
             f"при получении ответа от api {response}"
@@ -113,6 +112,7 @@ def check_response(response: dict):
 
     if "homeworks" not in response or "current_date" not in response:
         raise EmptyDictionaryOrListError("Нет ключа homeworks в ответе API")
+    print(homework_template)
     return homework_template
 
 
@@ -155,11 +155,6 @@ def main():
     while True:
         try:
             response = get_api_answer(current_timestamp)
-            if not response.get('homeworks'):
-                logger.debug(
-                    "Изменений нет, через 10 минут проверим API"
-                )
-                continue
             homework = check_response(response)[0]
             if homework:
                 message = parse_status(homework)
@@ -170,10 +165,15 @@ def main():
                 current_timestamp = response.get("current_date")
         except Exception as error:
             message = f"Сбой в работе программы: {error}"
+            unknown_error = f"Неизвестная ощибка: {error}"
             if error != previous_error:
                 send_message(bot, message)
                 error = previous_error
                 logger.error(message, exc_info=True)
+            else:
+                send_message(bot, unknown_error)
+                error = previous_error
+                logger.error(unknown_error, exc_info=True)
         finally:
             time.sleep(RETRY_PERIOD)
 

@@ -89,10 +89,7 @@ def get_api_answer(current_timestamp: int) -> dict:
 
 
 def check_response(response: dict):
-    """
-    Проверяет ответ API на корректность.
-    В качестве параметра функция получает ответ API.
-    """
+    """Проверяем корректность JSON."""
 
     logger.info("Проверка ответа API на корректность")
     if not isinstance(response, dict):

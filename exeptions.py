@@ -18,5 +18,9 @@ class TelegramError(Exception):
     """Ошибка отправки сообщения в telegram."""
 
 
+class NotTelegramError(Exception):
+    """Не нужно отправлять в telegram."""
+
+
 class CurrentDateDoesNotExists(Exception):
     """В ответе нет текущей даты"""

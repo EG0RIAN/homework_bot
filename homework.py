@@ -10,7 +10,8 @@ import telegram
 from dotenv import load_dotenv
 
 from exeptions import (CurrentDateDoesNotExists, EmptyDictionaryOrListError,
-                       WrongResponseCode)
+                       NotTelegramError, WrongResponseCode,
+                       EmptyResponseFromAPI, UndocumentedStatusError)
 
 load_dotenv()
 
@@ -20,7 +21,7 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 TIME_FORMAT = "%d-%m-%Y %H:%M"
 
-RETRY_PERIOD = 600
+RETRY_PERIOD = 60 * 10
 ENDPOINT = "https://practicum.yandex.ru/api/user_api/homework_statuses/"
 HEADERS = {"Authorization": f"OAuth {PRACTICUM_TOKEN}"}
 
@@ -31,9 +32,13 @@ HOMEWORK_VERDICTS = {
     "rejected": "Работа проверена: у ревьюера есть замечания."
 }
 
-logging.FileHandler(
-    filename="program.log",
-    mode="w",
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler("debug.log"),
+        logging.StreamHandler(sys.stdout)
+    ]
 )
 logger = logging.getLogger(__name__)
 
@@ -53,7 +58,6 @@ def send_message(bot: telegram.bot.Bot, message: str) -> None:
         bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
     except telegram.error.TelegramError as error:
         logging.error(f"Ошибка отправки статуса в telegram: {error}")
-        logging.error(f"Ошибка отправки статуса в telegram: {error}")
     else:
         logging.info("Успешная отправка сообщения!")
 
@@ -69,8 +73,9 @@ def get_api_answer(current_timestamp: int) -> dict:
         "headers": HEADERS,
         "params": {"from_date": timestamp},
     }
-    message = ("Начало запроса к API. Запрос: {url}, {headers}, {params}."
-               ).format(**params_request)
+    message = (
+        "Начало запроса к API. Запрос: {url}, {headers}, {params}."
+    ).format(**params_request)
     logging.info(message)
     try:
         response = requests.get(**params_request)
@@ -83,8 +88,9 @@ def get_api_answer(current_timestamp: int) -> dict:
             )
         return response.json()
     except Exception as error:
-        message = ("API не возвращает 200. Запрос: {url}, {headers}, {params}."
-                   ).format(**params_request)
+        message = (
+            "API не возвращает 200. Запрос: {url}, {headers}, {params}."
+        ).format(**params_request)
         raise WrongResponseCode(message, error)
 
 
@@ -99,39 +105,33 @@ def check_response(response: dict):
     if not response.get("current_date"):
         raise CurrentDateDoesNotExists("В ответе нет текущей даты")
 
-    homework_template = response.get("homeworks")
-    if not isinstance(homework_template, list):
+    homework_response = response.get("homeworks")
+    if not isinstance(homework_response, list):
         raise TypeError(
             f"при получении ответа от api {response}"
             f"в словаре нет домашней работы или она не является листом "
         )
 
-    if not homework_template:
+    if not homework_response:
         raise KeyError(f"в {response}  пустой JSON")
 
     if "homeworks" not in response or "current_date" not in response:
         raise EmptyDictionaryOrListError("Нет ключа homeworks в ответе API")
-    print(homework_template)
-    return homework_template
+    return homework_response
 
 
-def parse_status(homework: dict):
-    """
-    Извлекает из информации о конкретной домашней работе статус этой работы.
-    В случае успеха, функция возвращает подготовленную для отправки
-    в Telegram строку.
-    """
-    logging.info("Проводим проверки и извлекаем статус работы")
-    if "homework_name" not in homework:
-        raise KeyError("Нет ключа homework_name в ответе API")
-    homework_name = homework.get("homework_name")
-    homework_status = homework.get("status")
-    if homework_status not in HOMEWORK_VERDICTS:
-        raise ValueError(f"Неизвестный статус работы - {homework_status}")
-    return ("Изменился статус проверки работы \"{homework_name}\". {verdict}"
-            ).format(homework_name=homework_name,
-                     verdict=HOMEWORK_VERDICTS[homework_status]
-                     )
+def parse_status(homework):
+    """Информации о конкретном статусе домашней работы."""
+    homework_name = homework.get('homework_name')
+    homework_status = homework.get('status')
+    if not homework_name:
+        raise KeyError('У домашней работы отсутствует ключ homework_name')
+    if not homework_status:
+        raise EmptyResponseFromAPI('Неизвестный статус работы')
+    verdict = HOMEWORK_VERDICTS.get(homework_status)
+    if not verdict:
+        raise UndocumentedStatusError('Неожиданный статус домашней работы')
+    return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
 def main():
@@ -141,7 +141,7 @@ def main():
             "Программа принудительно остановлена. "
             "Отсутствует какой-то из токенов."
         )
-        logging.critical(f"{no_tokens_msg}")
+        logging.critical(no_tokens_msg)
         sys.exit("Отсутствует обязательная переменная окружения")
 
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
@@ -149,31 +149,28 @@ def main():
     send_message(
         bot,
         f"Я начал свою работу: {now.strftime(TIME_FORMAT)}")
-    current_timestamp = 1668370964
-    tmp_status = None
-    previous_error = None
+    current_timestamp = int(time.time())
     while True:
         try:
             response = get_api_answer(current_timestamp)
-            homework = check_response(response)[0]
+            check_response(response)
+            homework = response['homework']
             if homework:
+                homework = homework[0]
                 message = parse_status(homework)
-                curent_status = homework["status"]
-                if tmp_status != curent_status:
-                    send_message(bot, message)
-                    tmp_status = curent_status
-                current_timestamp = response.get("current_date")
-        except Exception as error:
-            message = f"Сбой в работе программы: {error}"
-            unknown_error = f"Неизвестная ощибка: {error}"
-            if error != previous_error:
                 send_message(bot, message)
-                error = previous_error
-                logger.error(message, exc_info=True)
+                logging.debug('Сообщение о новом статусе было отправлено')
             else:
-                send_message(bot, unknown_error)
-                error = previous_error
-                logger.error(unknown_error, exc_info=True)
+                logger.debug('Новых статусов нет')
+        except NotTelegramError as error:
+            logging.error(
+                f'Что то сломалось при отправке,{error}',
+                exc_info=True
+            )
+        except Exception as error:
+            message = f'Сбой в работе программы: {error}'
+            send_message(bot, message)
+            logger.error(message, exc_info=error)
         finally:
             time.sleep(RETRY_PERIOD)
 

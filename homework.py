@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 from exeptions import (CurrentDateDoesNotExists, EmptyDictionaryOrListError,
                        NotTelegramError, WrongResponseCode,
-                       EmptyResponseFromAPI, UndocumentedStatusError)
+                       UndocumentedStatusError)
 
 load_dotenv()
 
@@ -123,15 +123,23 @@ def check_response(response: dict):
 def parse_status(homework):
     """Информации о конкретном статусе домашней работы."""
     homework_name = homework.get('homework_name')
-    homework_status = homework.get('status')
-    if not homework_name:
-        raise KeyError('У домашней работы отсутствует ключ homework_name')
-    if not homework_status:
-        raise EmptyResponseFromAPI('Неизвестный статус работы')
-    verdict = HOMEWORK_VERDICTS.get(homework_status)
+    if 'status' not in homework:
+        raise KeyError('Статус отсутствует в homeworks')
+    if homework.get('status') not in HOMEWORK_VERDICTS:
+        raise KeyError('В домашней работе нет соответствующего статуса')
+    if 'homework_name' not in homework:
+        raise KeyError('Имя работы не найдено в домашней работе.')
+    verdict = homework.get('status')
+    homework_name = homework.get('homework_name')
+    message = HOMEWORK_VERDICTS[verdict]
     if not verdict:
         raise UndocumentedStatusError('Неожиданный статус домашней работы')
-    return f'Изменился статус проверки работы "{homework_name}". {verdict}'
+    return (
+        f'Изменился статус проверки работы "'
+        f'{homework_name}"'
+        f' {verdict}'
+        f' {message}'
+    )
 
 
 def main():
@@ -149,19 +157,24 @@ def main():
     send_message(
         bot,
         f"Я начал свою работу: {now.strftime(TIME_FORMAT)}")
-    current_timestamp = int(time.time())
+    timestamp = int(time.time())
+    preview_api_response = None
     while True:
         try:
-            response = get_api_answer(current_timestamp)
-            check_response(response)
-            homework = response['homework']
+            api_answer = get_api_answer(timestamp)
+            if not check_response(api_answer):
+                continue
+            homework = check_response(api_answer)[0]
             if homework:
-                homework = homework[0]
                 message = parse_status(homework)
-                send_message(bot, message)
-                logging.debug('Сообщение о новом статусе было отправлено')
-            else:
-                logger.debug('Новых статусов нет')
+                current_api_answer = homework
+                if current_api_answer != preview_api_response:
+                    send_message(bot, message)
+                    preview_api_response = current_api_answer
+                logging.info(
+                    'Новое домашнее задание не появилось или не изменилось'
+                )
+                timestamp = api_answer.get('current_date')
         except NotTelegramError as error:
             logging.error(
                 f'Что то сломалось при отправке,{error}',
@@ -169,8 +182,7 @@ def main():
             )
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
-            send_message(bot, message)
-            logger.error(message, exc_info=error)
+            logging.error(message, exc_info=True)
         finally:
             time.sleep(RETRY_PERIOD)
 

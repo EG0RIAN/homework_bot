@@ -162,9 +162,10 @@ def main():
     while True:
         try:
             api_answer = get_api_answer(timestamp)
-            if not check_response(api_answer):
+            check_response_api = check_response(api_answer)
+            if not check_response_api:
                 continue
-            homework = check_response(api_answer)[0]
+            homework = check_response_api[0]
             if homework:
                 message = parse_status(homework)
                 current_api_answer = homework
@@ -174,7 +175,9 @@ def main():
                 logging.info(
                     'Новое домашнее задание не появилось или не изменилось'
                 )
-                timestamp = api_answer.get('current_date')
+                timestamp = int(time.time())
+            else:
+                logger.debug('Новых статусов нет')
         except NotTelegramError as error:
             logging.error(
                 f'Что то сломалось при отправке,{error}',
@@ -182,7 +185,8 @@ def main():
             )
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
-            logging.error(message, exc_info=True)
+            send_message(bot, message)
+            logging.error(message, exc_info=error)
         finally:
             time.sleep(RETRY_PERIOD)
 

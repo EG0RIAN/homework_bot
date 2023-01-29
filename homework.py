@@ -10,8 +10,8 @@ import telegram
 from dotenv import load_dotenv
 
 from exeptions import (CurrentDateDoesNotExists, EmptyDictionaryOrListError,
-                       NotTelegramError, WrongResponseCode,
-                       UndocumentedStatusError)
+                       NotTelegramError, UndocumentedStatusError,
+                       WrongResponseCode)
 
 load_dotenv()
 

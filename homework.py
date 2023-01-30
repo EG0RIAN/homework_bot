@@ -162,10 +162,10 @@ def main():
     while True:
         try:
             response = get_api_answer(timestamp)
-            check_response(response)
+            timestamp = response.get('current_date')
             api_answer = get_api_answer(timestamp)
             homeworks = check_response(api_answer)
-            timestamp = response.get('current_date')
+
             if homeworks:
                 homework = homeworks[0]
                 message = parse_status(homework)

@@ -162,9 +162,9 @@ def main():
     while True:
         try:
             response = get_api_answer(timestamp)
+            check_response(response)
             timestamp = response.get('current_date')
-            api_answer = get_api_answer(timestamp)
-            homeworks = check_response(api_answer)
+            homeworks = response['homeworks']
 
             if homeworks:
                 homework = homeworks[0]
@@ -173,9 +173,9 @@ def main():
                 if current_api_answer != preview_api_response:
                     send_message(bot, message)
                     preview_api_response = current_api_answer
-                logging.info(
-                    'Новое домашнее задание не появилось или не изменилось'
-                )
+                    logging.info(
+                        'Новое домашнее задание не появилось или не изменилось'
+                    )
             else:
                 logger.debug('Новых статусов нет')
         except NotTelegramError as error:
